@@ -3,8 +3,13 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { CatAgent, CatPending, CatQuestion, CatStatus, SkillMode } from '../types'
 
+import { STRINGS, languageOf } from './strings'
+import type { Strings } from './strings'
+
 const PANE = 'agent-cats'
-const TITLE = 'Agent 貓貓'
+// The words of the language the `language` option names; set by `register`
+// (a change of the option reloads the module).
+let t: Strings = STRINGS.en
 const MAIN = 'main'
 const MAIN_COLOR = '#F4A261'
 const PALETTE = ['#2B2D42', '#F5F5F5', '#E76F51', '#8E7DBE', '#2A9D8F', '#E9C46A', '#6C757D', '#F28482', '#4D96FF']
@@ -52,9 +57,9 @@ function skillOptions(names: readonly string[], filter: string, hint: string): {
   const hidden = matches.length - shown.length
   const label =
     matches.length === 0
-      ? `— 冇 skill 符合「${filter.trim()}」—`
+      ? t.noMatch(filter.trim())
       : hidden > 0
-        ? `${hint}（仲有 ${hidden} 個，喺上面打字篩選）`
+        ? t.moreHidden(hint, hidden)
         : hint
 
   return [{ value: PICK_HINT, label }, ...shown.map(n => ({ value: n }))]
@@ -65,12 +70,6 @@ type Answers = Record<string, string>
 // Lives with this module: after a reload the old waits are gone, so their
 // questions fall back to the engine's own dialog.
 const resolvers = new Map<string, (answers: Answers) => void>()
-
-const STATUS_TEXT: Record<CatStatus, string> = {
-  working: '工作中',
-  sleeping: '休眠（可喚醒）',
-  closed: '已結束',
-}
 
 const STATUS_COLOR: Record<CatStatus, string> = {
   working: '#2A9D8F',
@@ -159,7 +158,7 @@ function describeInput(input: unknown): string {
 }
 
 async function meow($: EngineInterface, text: string): Promise<void> {
-  $.ui.toast(`🐱 喵！${text}`)
+  $.ui.toast(`🐱 ${text}`)
   try {
     await $.audio.play({ asset: 'sounds/meow.wav' })
   } catch (error) {
@@ -192,7 +191,8 @@ async function setMain($: EngineInterface, change: (row: CatAgent) => CatAgent):
       list.find(r => r.id === MAIN) ??
       ({
         id: MAIN,
-        label: '主 agent',
+        // Empty until the first turn; drawn as the main agent's name meanwhile.
+        label: '',
         type: 'main',
         status: 'sleeping',
         rawStatus: 'idle',
@@ -271,11 +271,11 @@ async function giveSkill($: EngineInterface, row: CatAgent, skill: string): Prom
       text: `Use SendMessage to wake the agent "${row.name}" (${row.label}) and tell it to load the skill "${skill}" with the Skill tool and use it to continue its task.`,
     })
   } else {
-    $.ui.toast(`🐱 ${row.nickname || row.label} 已經結束，交唔到 skill`)
+    $.ui.toast(`🐱 ${t.skillNotGiven(row.nickname || row.label)}`)
 
     return
   }
-  $.ui.toast(`🐱 已經叫「${row.nickname || row.label}」用 ${skill}`)
+  $.ui.toast(`🐱 ${t.skillGiven(row.nickname || row.label || t.mainAgent, skill)}`)
 }
 
 async function sync($: EngineInterface): Promise<void> {
@@ -344,12 +344,14 @@ async function sync($: EngineInterface): Promise<void> {
   }
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  t = STRINGS[languageOf(options['language'])]
+
   on('session.start', async ($, e, next) => {
     await setMain($, row => row)
     $.ui.log(`agent-cats: ${await loadSkills($)}`, { to: 'debug' })
-    await $.command.register({ name: 'cats', description: 'Open the Agent 貓貓 dashboard' })
-    void $.ui.open({ id: PANE, title: TITLE })
+    await $.command.register({ name: 'cats', description: t.commandDescription })
+    void $.ui.open({ id: PANE, title: t.title })
     $.clock.every(1000, () => {
       void sync($)
     })
@@ -369,10 +371,10 @@ export const register: Register = on => {
 
   on('command.run', { command: 'cats' }, async $ => {
     const found = await loadSkills($)
-    await $.ui.open({ id: PANE, title: TITLE, focus: true })
+    await $.ui.open({ id: PANE, title: t.title, focus: true })
     const focus = focusSeen.length > 0 ? focusSeen.join(', ') : 'none'
 
-    return { text: `Agent 貓貓 dashboard opened. ${found}; draws ${renders}; writes ${JSON.stringify(writes)}; last focus ${focus}` }
+    return { text: `${t.opened} ${found}; draws ${renders}; writes ${JSON.stringify(writes)}; last focus ${focus}` }
   })
 
   // The skills chosen in the dashboard ride along with every prompt and spawn.
@@ -436,7 +438,7 @@ export const register: Register = on => {
         }
       }
     }
-    // The "用緊 X" line waits while the person is in a picker; a skill is kept.
+    // The "using X" line waits while the person is in a picker; a skill is kept.
     const showsTool = !(await isHolding($))
     await patchAgent($, who, row => ({
       ...row,
@@ -474,8 +476,8 @@ export const register: Register = on => {
       others: questions.map(() => ''),
     }
     await update($, pending, list => [...(list ?? []), item])
-    void $.ui.open({ id: PANE, title: TITLE, focus: true })
-    void meow($, '有 agent 問你問題，喺 Agent 貓貓 dashboard 答')
+    void $.ui.open({ id: PANE, title: t.title, focus: true })
+    void meow($, t.meowQuestion)
 
     try {
       const won = await Promise.race([
@@ -508,8 +510,8 @@ export const register: Register = on => {
       detail: describeInput(e.tool_input),
     }
     await update($, pending, list => [...(list ?? []), item])
-    void $.ui.open({ id: PANE, title: TITLE })
-    void meow($, `有 agent 想用 ${e.tool_name}，等你批准`)
+    void $.ui.open({ id: PANE, title: t.title })
+    void meow($, t.meowPermission(e.tool_name))
 
     return next(e)
   })
@@ -524,10 +526,10 @@ export const register: Register = on => {
     return (
       <Box flexDirection="row" gap={1}>
         <Text color={MAIN_COLOR}>ᓚᘏᗢ</Text>
-        <Text>呢條問題請喺「{TITLE}」dashboard 回答。</Text>
+        <Text>{t.pointer(t.title)}</Text>
         <Button
           key={`native-${e.requestId}`}
-          label="喺呢度答"
+          label={t.answerHere}
           plain
           onPress={() => update($, native, list => [...(list ?? []), e.requestId])}
         />
@@ -601,24 +603,30 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column" gap={1}>
         <Box flexDirection="row" gap={2}>
-          <Text bold>🐾 {TITLE}</Text>
-          <Text color={STATUS_COLOR.working}>工作中 {working}</Text>
-          <Text color={STATUS_COLOR.sleeping}>休眠 {sleeping}</Text>
-          <Text color={waits.length > 0 ? '#E76F51' : '#888888'}>等你回覆 {waits.length}</Text>
+          <Text bold>🐾 {t.title}</Text>
+          <Text color={STATUS_COLOR.working}>
+            {t.counts.working} {working}
+          </Text>
+          <Text color={STATUS_COLOR.sleeping}>
+            {t.counts.sleeping} {sleeping}
+          </Text>
+          <Text color={waits.length > 0 ? '#E76F51' : '#888888'}>
+            {t.counts.waiting} {waits.length}
+          </Text>
         </Box>
 
         <Box flexDirection="column" gap={1} borderStyle="round" borderColor="#4D96FF" paddingX={1}>
           <Box flexDirection="row" gap={2} alignItems="center" flexWrap="wrap">
-            <Text bold color="#4D96FF">今次任務用嘅 skills</Text>
+            <Text bold color="#4D96FF">{t.skillsHeading}</Text>
             <Button
               key="skill-mode"
-              label={mode === 'only' ? '模式：只准用揀咗嘅' : '模式：優先用揀咗嘅'}
+              label={mode === 'only' ? t.modeOnly : t.modePrefer}
               variant={mode === 'only' ? 'primary' : 'secondary'}
               onPress={() => update($, skillMode, m => (m === 'only' ? 'prefer' : 'only'))}
             />
             <Button
               key="skills-reload"
-              label="重新整理清單"
+              label={t.reloadList}
               plain
               onPress={async () => {
                 $.ui.toast(`🐱 ${await loadSkills($)}`)
@@ -626,7 +634,7 @@ export const register: Register = on => {
             />
           </Box>
           {active.length === 0 ? (
-            <Text dimColor>未揀（全部 skills 照常可用）</Text>
+            <Text dimColor>{t.noneChosen}</Text>
           ) : (
             <Box flexDirection="row" flexWrap="wrap" gap={1}>
               {active.map(name => (
@@ -636,27 +644,27 @@ export const register: Register = on => {
                   onPress={() => update($, activeSkills, list => (list ?? []).filter(n => n !== name))}
                 />
               ))}
-              <Button key="active-clear" label="全部清除" plain onPress={() => update($, activeSkills, () => [])} />
+              <Button key="active-clear" label={t.clearAll} plain onPress={() => update($, activeSkills, () => [])} />
             </Box>
           )}
           {Input && installed.length > MAX_SKILL_OPTIONS && (
             <Input
               key="skill-filter"
-              placeholder={`篩選 skill（共 ${installed.length} 個），打關鍵字再 Enter`}
+              placeholder={t.filterPlaceholder(installed.length)}
               value={filter}
-              submitLabel="篩選"
+              submitLabel={t.filterSubmit}
               onSubmit={value => update($, skillFilter, () => value)}
             />
           )}
           {Select && installed.length > 0 && (
             <Select
               key="active-add"
-              label="加入 skill："
+              label={t.addSkill}
               value={PICK_HINT}
               options={skillOptions(
                 installed.filter(n => !active.includes(n)),
                 filter,
-                '— 揀一個已安裝嘅 skill —',
+                t.pickInstalled,
               )}
               onSelect={value => {
                 if (value !== PICK_HINT) {
@@ -665,12 +673,12 @@ export const register: Register = on => {
               }}
             />
           )}
-          {installed.length === 0 && <Text dimColor>搵唔到已安裝嘅 skills，試吓撳「重新整理清單」。</Text>}
+          {installed.length === 0 && <Text dimColor>{t.noSkillsFound}</Text>}
           {Input && (
             <Input
               key="skill-search"
-              placeholder="搵新 skill：講你想做乜，Enter 叫主 agent 去搵"
-              submitLabel="搵"
+              placeholder={t.searchPlaceholder}
+              submitLabel={t.searchSubmit}
               onSubmit={value => {
                 const need = value.trim()
                 if (need) {
@@ -680,7 +688,7 @@ export const register: Register = on => {
                       'Search the skill and plugin catalogs (SearchSkills, SearchPlugins), then show the fitting results ' +
                       'as install cards (SuggestSkills, SuggestPluginInstall) so the user approves the install. Do not install anything yourself.',
                   })
-                  $.ui.toast('🐱 已經叫主 agent 去搵 skill')
+                  $.ui.toast(`🐱 ${t.searchToast}`)
                 }
               }}
             />
@@ -689,16 +697,16 @@ export const register: Register = on => {
 
         {waits.length > 0 && (
           <Box flexDirection="column" gap={1} borderStyle="round" borderColor="#E76F51" paddingX={1}>
-            <Text bold color="#E76F51">需要你回覆</Text>
+            <Text bold color="#E76F51">{t.needsYou}</Text>
             {waits.map(p => {
               const who = byId(p.agentId)
               const color = who?.color ?? MAIN_COLOR
-              const name = who?.nickname || who?.label || p.agentId
+              const name = who?.nickname || who?.label || (p.agentId === MAIN ? t.mainAgent : p.agentId)
               const head = (
                 <Box flexDirection="row" gap={1} alignItems="center">
                   {cat(color, false, `ask-cat-${p.id}`)}
                   <Text bold>{name}</Text>
-                  <Text dimColor>等咗 {elapsed(p.askedAt, now)}</Text>
+                  <Text dimColor>{t.waited(elapsed(p.askedAt, now))}</Text>
                 </Box>
               )
 
@@ -706,8 +714,8 @@ export const register: Register = on => {
                 return (
                   <Box key={`wait-${p.id}`} flexDirection="column">
                     {head}
-                    <Text>想用 {p.tool}{p.detail ? `：${p.detail}` : ''}</Text>
-                    <Text dimColor>請喺權限對話框揀 Allow / Deny（權限只可以由原生對話框批准）。</Text>
+                    <Text>{t.wantsTool(p.tool ?? '', p.detail ?? '')}</Text>
+                    <Text dimColor>{t.permissionNote}</Text>
                   </Box>
                 )
               }
@@ -740,21 +748,21 @@ export const register: Register = on => {
                       {Input && (
                         <Input
                           key={`other-${p.id}-${i}`}
-                          placeholder={q.kind === 'choice' ? '其他（自己打，Enter 確認）' : '你嘅答案（Enter 確認）'}
+                          placeholder={q.kind === 'choice' ? t.otherPlaceholder : t.answerPlaceholder}
                           value={p.others[i] ?? ''}
-                          submitLabel="確認"
+                          submitLabel={t.confirm}
                           onSubmit={value => typeOther(p, i, value)}
                         />
                       )}
                     </Box>
                   ))}
                   {isOrphan || isNative ? (
-                    <Text dimColor>請喺原生對話框回答。</Text>
+                    <Text dimColor>{t.answerNatively}</Text>
                   ) : (
                     <Box flexDirection="row" gap={1}>
                       <Button
                         key={`send-${p.id}`}
-                        label={isReady ? '送出答案' : '送出答案（未答晒）'}
+                        label={isReady ? t.send : t.sendIncomplete}
                         variant="primary"
                         dimColor={!isReady}
                         onPress={() => {
@@ -765,7 +773,7 @@ export const register: Register = on => {
                       />
                       <Button
                         key={`use-native-${p.id}`}
-                        label="改用原生對話框"
+                        label={t.useNative}
                         onPress={() => update($, native, list => [...(list ?? []), p.id])}
                       />
                     </Box>
@@ -776,26 +784,30 @@ export const register: Register = on => {
           </Box>
         )}
 
-        {visible.length === 0 && <Text dimColor>未有 agent。</Text>}
+        {visible.length === 0 && <Text dimColor>{t.noAgents}</Text>}
         {visible.map(r => (
           <Box key={`agent-${r.id}`} flexDirection="column" borderStyle="round" borderColor={r.color} paddingX={1}>
             <Box flexDirection="row" gap={1} alignItems="center">
               {cat(r.color, r.status !== 'working', `cat-${r.id}`)}
               <Text bold wrap="truncate-end">
-                {r.nickname || r.label}
+                {r.nickname || r.label || t.mainAgent}
               </Text>
               {editing !== r.id && (
-                <Button key={`rename-btn-${r.id}`} label="✎ 改名" plain onPress={() => update($, renaming, () => r.id)} />
+                <Button key={`rename-btn-${r.id}`} label={t.rename} plain onPress={() => update($, renaming, () => r.id)} />
               )}
             </Box>
-            {r.nickname && <Text dimColor wrap="truncate-end">任務：{r.label}</Text>}
+            {r.nickname && r.label && (
+              <Text dimColor wrap="truncate-end">
+                {t.taskLabel(r.label)}
+              </Text>
+            )}
             {Input && editing === r.id && (
               <Box flexDirection="row" gap={1}>
                 <Input
                   key={`rename-${r.id}`}
-                  placeholder="新名（留空就用返原本嘅任務名）"
+                  placeholder={t.renamePlaceholder}
                   value={r.nickname ?? ''}
-                  submitLabel="改名"
+                  submitLabel={t.renameSubmit}
                   autoFocus
                   onSubmit={value => {
                     const nickname = value.trim().slice(0, 40)
@@ -803,22 +815,24 @@ export const register: Register = on => {
                     void update($, renaming, () => '')
                   }}
                 />
-                <Button key={`rename-cancel-${r.id}`} label="取消" plain onPress={() => update($, renaming, () => '')} />
+                <Button key={`rename-cancel-${r.id}`} label={t.cancel} plain onPress={() => update($, renaming, () => '')} />
               </Box>
             )}
             <Box flexDirection="row" gap={2} flexWrap="wrap">
-              <Text color={STATUS_COLOR[r.status]}>{STATUS_TEXT[r.status]}</Text>
+              <Text color={STATUS_COLOR[r.status]}>{t.status[r.status]}</Text>
               <Text dimColor>⏱ {r.startedAt ? elapsed(r.startedAt, r.endedAt ?? now) : '--:--'}</Text>
               <Text dimColor>{r.type}</Text>
-              {r.tool && <Text color="#4D96FF">用緊 {r.tool}</Text>}
+              {r.tool && <Text color="#4D96FF">{t.usingTool(r.tool)}</Text>}
             </Box>
-            <Text dimColor={r.skills.length === 0}>Skills：{r.skills.length > 0 ? r.skills.join('、') : '未用'}</Text>
+            <Text dimColor={r.skills.length === 0}>
+              {t.skillsUsed(r.skills.length > 0 ? r.skills.join(t.skillsSeparator) : t.skillsNone)}
+            </Text>
             {Select && r.status !== 'closed' && installed.length > 0 && (
               <Select
                 key={`give-${r.id}`}
-                label="＋Skill："
+                label={t.giveSkill}
                 value={PICK_HINT}
-                options={skillOptions(installed, filter, '— 交一個 skill 俾佢 —')}
+                options={skillOptions(installed, filter, t.giveSkillHint)}
                 onSelect={value => {
                   if (value !== PICK_HINT) {
                     void giveSkill($, r, value)
@@ -831,8 +845,8 @@ export const register: Register = on => {
                 {Input && r.name && (
                   <Input
                     key={`wake-${r.id}`}
-                    placeholder="交代新工作，Enter 喚醒佢"
-                    submitLabel="喚醒"
+                    placeholder={t.wakePlaceholder}
+                    submitLabel={t.wakeSubmit}
                     onSubmit={value => {
                       const task = value.trim()
                       if (task && r.name) {
@@ -845,7 +859,7 @@ export const register: Register = on => {
                 )}
                 <Button
                   key={`close-${r.id}`}
-                  label="唔使再喚醒，關閉佢"
+                  label={t.closeCat}
                   plain
                   onPress={() =>
                     patchAgent($, r.id, row => ({ ...row, status: 'closed', isHidden: true }))
@@ -858,7 +872,7 @@ export const register: Register = on => {
         {hiddenClosed && (
           <Button
             key="clear-closed"
-            label="收埋已結束嘅貓"
+            label={t.hideClosed}
             plain
             onPress={() =>
               update($, agents, list => (list ?? []).map(r => (r.status === 'closed' ? { ...r, isHidden: true } : r)))

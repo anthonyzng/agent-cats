@@ -9,7 +9,7 @@
       "name": "agent-cats",
       "source": "./",
       "description": "A dashboard of the session's agents as coloured cats: their tasks, skills and run time, their questions answered in place with a meow, and the skills each task uses",
-      "version": "0.1.0"
+      "version": "0.2.0"
     }
   ]
 }

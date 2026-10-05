@@ -1,11 +1,32 @@
 {
   "name": "agent-cats",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A dashboard of the session's agents as coloured cats: their tasks, skills and run time, their questions answered in place with a meow, and the skills each task uses",
-  "author": { "name": "anthonyzng", "url": "https://github.com/anthonyzng" },
+  "author": {
+    "name": "anthonyzng",
+    "url": "https://github.com/anthonyzng"
+  },
   "homepage": "https://github.com/anthonyzng/agent-cats",
   "repository": "https://github.com/anthonyzng/agent-cats",
   "license": "MIT",
-  "keywords": ["mod", "dashboard", "agents", "subagents", "skills"],
-  "types": "./types/index.d.ts"
+  "keywords": [
+    "mod",
+    "dashboard",
+    "agents",
+    "subagents",
+    "skills"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "language": {
+      "type": "string",
+      "title": "Language",
+      "description": "The dashboard language: en (English) or zh-Hant (Traditional Chinese)",
+      "default": "en",
+      "options": [
+        "en",
+        "zh-Hant"
+      ]
+    }
+  }
 }

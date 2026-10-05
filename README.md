@@ -1,26 +1,27 @@
 # Agent Cats
 
+**English** | [繁體中文](README.zh-Hant.md)
+
 A [Claude Code](https://claude.com/claude-code) mod that turns the agents of a session into a dashboard of cats.
 
 - **One cat per agent.** The main agent and every subagent each get their own colour: an SVG cat on the desktop app and VS Code, `ᓚᘏᗢ` in the terminal.
 - **What each cat is doing.** Every cat shows its task, its status, how long it has run, its agent type, the tool it is using now and the skills it has loaded.
 - **Asleep or done.** When a subagent finishes, its cat changes status:
-  - **sleeping** if `SendMessage` can still reach it. Give it a new task in its field and the main agent wakes it.
-  - **done** if it failed, was stopped or cannot be addressed.
-  - **Close it** when you no longer need to wake it.
+  - **Asleep** if `SendMessage` can still reach it. Give it a new task in its field and the main agent wakes it.
+  - **Done** if it failed, was stopped or cannot be addressed.
+  - **Close** it when you no longer need to wake it.
 - **Questions answered in place.** When an agent asks you something (`AskUserQuestion`), the question appears at the top of the dashboard with a meow, played once per question.
   - Pick an option, or type your own answer.
   - The engine's own dialog is replaced by a pointer to the dashboard. **Use the native dialog** is a fallback.
   - Permission prompts appear too, with the same meow. Allow / Deny stays in the engine's own dialog: only the engine may grant a permission.
-- **Rename cats.** Give any cat a name of your own with **✎ 改名**.
+- **Rename cats.** Give any cat a name of your own with **✎ Rename**.
 - **Skills:**
   - **＋Skill** on a cat hands it one of your installed skills. A running agent reads the request at its next step. A sleeping subagent is woken with it. An idle main agent gets it as a prompt.
-  - **搵新 skill** asks the main agent to search the skill and plugin catalogs and show install cards. Nothing is installed until you approve a card.
-  - **今次任務用嘅 skills** picks the skills for the work at hand, in one of two modes:
-    - **優先用** (prefer): every prompt and new subagent is told to use them.
-    - **只准用** (only): every other skill is refused.
-
-The interface text is in Traditional Chinese (Cantonese).
+  - **Find a new skill** asks the main agent to search the skill and plugin catalogs and show install cards. Nothing is installed until you approve a card.
+  - **Skills for this task** picks the skills for the work at hand, in one of two modes:
+    - **Prefer:** every prompt and new subagent is told to use them.
+    - **Only:** every other skill is refused.
+- **English or Traditional Chinese.** The dashboard's language is a setting (see below).
 
 ## Requirements
 
@@ -52,6 +53,10 @@ claude --plugin-dir ./agent-cats
 
 Hosts that cannot take a flag, such as the desktop app, read the same folders from `CLAUDE_CODE_PLUGIN_DIRS`. Set it in the `env` block of `~/.claude/settings.json` to an absolute path.
 
+## Language
+
+The dashboard is in English by default. To switch it to Traditional Chinese (Cantonese), open `/config`, find the **Language** row of agent-cats and pick `zh-Hant`. Claude Code saves the choice under `pluginConfigs` in `~/.claude/settings.json`, and the mod reloads with the new language at once. Text the agents read, such as the skill instructions, stays in English.
+
 ## Things to know
 
 - **Mods are not sandboxed.** This one runs inside Claude Code with your permissions, like every mod. Read `hooks/register.tsx` before you install it. It makes no network calls and writes no files. The only external thing it touches is the bundled sound, `sounds/meow.wav`.
@@ -71,7 +76,7 @@ claude plugin test .       # tests/*.test.tsx against the engine itself
 python scripts/make-meow.py  # regenerate sounds/meow.wav (stdlib only)
 ```
 
-Claude Code writes the type declarations into `.claude-plugin/types/` when it loads the mod. `tsconfig.json` extends them, so `tsc -p .` type-checks the module.
+Claude Code writes the type declarations into `.claude-plugin/types/` when it loads the mod. `tsconfig.json` extends them, so `tsc -p .` type-checks the module. The interface words live in `hooks/strings.ts`, one table per language.
 
 ## License
 
