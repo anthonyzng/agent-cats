@@ -72,3 +72,7 @@ python scripts/make-meow.py  # regenerate sounds/meow.wav (stdlib only)
 ```
 
 Claude Code writes the type declarations into `.claude-plugin/types/` when it loads the mod. `tsconfig.json` extends them, so `tsc -p .` type-checks the module.
+
+## License
+
+[MIT](LICENSE)

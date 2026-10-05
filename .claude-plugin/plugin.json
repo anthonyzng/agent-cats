@@ -5,6 +5,7 @@
   "author": { "name": "anthonyzng", "url": "https://github.com/anthonyzng" },
   "homepage": "https://github.com/anthonyzng/agent-cats",
   "repository": "https://github.com/anthonyzng/agent-cats",
+  "license": "MIT",
   "keywords": ["mod", "dashboard", "agents", "subagents", "skills"],
   "types": "./types/index.d.ts"
 }
