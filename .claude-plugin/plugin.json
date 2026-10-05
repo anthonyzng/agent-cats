@@ -1,0 +1,10 @@
+{
+  "name": "agent-cats",
+  "version": "0.1.0",
+  "description": "A dashboard of the session's agents as coloured cats: their tasks, skills and run time, their questions answered in place with a meow, and the skills each task uses",
+  "author": { "name": "anthonyzng", "url": "https://github.com/anthonyzng" },
+  "homepage": "https://github.com/anthonyzng/agent-cats",
+  "repository": "https://github.com/anthonyzng/agent-cats",
+  "keywords": ["mod", "dashboard", "agents", "subagents", "skills"],
+  "types": "./types/index.d.ts"
+}

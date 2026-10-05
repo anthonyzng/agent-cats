@@ -1,0 +1,5 @@
+# Editor and tool output; the engine regenerates .claude-plugin/types itself
+.claude/
+node_modules/
+__pycache__/
+*.pyc

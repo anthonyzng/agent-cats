@@ -1,0 +1,15 @@
+{
+  "name": "agent-cats",
+  "owner": { "name": "anthonyzng" },
+  "metadata": {
+    "description": "Agent Cats: a Claude Code mod that shows every agent of a session as a cat"
+  },
+  "plugins": [
+    {
+      "name": "agent-cats",
+      "source": "./",
+      "description": "A dashboard of the session's agents as coloured cats: their tasks, skills and run time, their questions answered in place with a meow, and the skills each task uses",
+      "version": "0.1.0"
+    }
+  ]
+}
