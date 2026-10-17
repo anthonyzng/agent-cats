@@ -10,10 +10,14 @@
   - **休眠（可喚醒）**：`SendMessage` 仲搵到佢。喺佢個輸入框交代新工作，主 agent 就會叫醒佢。
   - **已結束**：失敗、被停咗，或者已經冇得聯絡佢。
   - 唔使再叫醒佢，就撳**關閉**。
-- **喺 dashboard 直接答問題。** Agent 問你嘢（`AskUserQuestion`）嗰陣，問題會出喺 dashboard 頂部，仲會喵一聲。每條問題只會喵一次。
+- **只睇某類貓。** 頂部嘅數字係掣：**全部**、**工作中**、**休眠**、**等你回覆**，撳咗就只顯示嗰類貓；再撳一次揀咗嗰個就返去睇全部。
+- **停止一隻貓。** 工作中嘅貓有 **■ 停止**，撳咗會先問你確認。主 agent 會中止嗰一輪，subagent 會用 `TaskStop` 停止。停咗嘅貓仍然有 **＋Skill** 選單：交個 skill 俾佢，佢讀完就會繼續做（subagent 用 `SendMessage` 喚醒，所以佢要有名）。
+- **刪除一隻貓。** 唔係工作中嘅貓有 **🗑 刪除**，撳咗佢就會由 dashboard 消失，就算 Claude Code 仲列住呢個 agent 都唔會再出現。
+- **Agent 完成或者等你嗰陣會出聲。** Agent 完成任務、問你問題或者等權限嗰陣，會播 `sounds/Hachimi.mp3`。同一時間只會播一段：幾個 agent 接連完成都只會響一次，播緊嗰陣唔會排隊亦唔會疊埋一齊播。你自己停咗嘅貓唔會響。
+- **喺 dashboard 直接答問題。** Agent 問你嘢（`AskUserQuestion`）嗰陣，問題會出喺 dashboard 頂部，同時會出聲提你。
   - 撳一個選項，或者自己打答案。
   - 原本嘅對話框會變成一句提示，叫你去 dashboard 答。萬一有問題，可以撳**改用原生對話框**。
-  - 權限請求都會顯示，同樣會喵一聲。不過 Allow / Deny 仍然要喺原生對話框撳，因為只有引擎可以批准權限。
+  - 權限請求都會顯示，同樣會出聲。不過 Allow / Deny 仍然要喺原生對話框撳，因為只有引擎可以批准權限。
 - **幫貓改名。** 用 **✎ 改名** 幫每隻貓改個你自己記得嘅名。
 - **Skills：**
   - 每隻貓嘅 **＋Skill** 可以交一個已安裝嘅 skill 俾佢：
@@ -68,14 +72,14 @@ Claude Code 會將個選擇存喺 `~/.claude/settings.json` 嘅 `pluginConfigs`�
 
 ## 要留意嘅地方
 
-- **Mods 冇 sandbox。** 同所有 mod 一樣，呢個 mod 喺 Claude Code 入面用你嘅權限行。安裝之前請先睇 `hooks/register.tsx`。佢唔會上網，亦唔會寫任何檔案；唯一用到嘅外部檔案係內附嘅貓叫聲 `sounds/meow.wav`。
+- **Mods 冇 sandbox。** 同所有 mod 一樣，呢個 mod 喺 Claude Code 入面用你嘅權限行。安裝之前請先睇 `hooks/register.tsx`。佢唔會上網，亦唔會寫任何檔案；唯一用到嘅外部檔案係內附嘅聲音檔 `sounds/Hachimi.mp3`。
 - **「只准用」模式對成個 session 所有 agent 都生效**，包括主 agent。
 - **你用緊 dashboard 嘅時候，佢唔會郁。** 你喺下拉選單或者輸入框入面嗰陣，每秒一次嘅更新會暫停，所以打開咗嘅選單唔會跳返最頂。
   - Terminal 版做得到。
   - Desktop app 唔會講係邊個元素攞咗 focus，所以喺 desktop，agent 做緊嘢嗰陣，打開咗嘅下拉選單仍然可能被重新畫。
   - 所有 agent 都閒住嘅時候，dashboard 完全唔會重新畫。
 - **`/cats` 會印一行診斷**：搵到幾多個 skill、pane 畫咗幾多次，同埋最近嘅 focus 變化。
-- **播貓叫聲。** 用 Claude Code 自己嘅播放器；冇播放器嘅環境就只會出 toast 通知。
+- **播聲音。** 用 Claude Code 自己嘅播放器，Windows 或者 Linux 嘅 terminal 冇播放器；冇播放器嘅環境就只會出 toast 通知。
 
 ## 開發
 

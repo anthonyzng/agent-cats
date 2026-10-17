@@ -10,10 +10,14 @@ A [Claude Code](https://claude.com/claude-code) mod that turns the agents of a s
   - **Asleep** if `SendMessage` can still reach it. Give it a new task in its field and the main agent wakes it.
   - **Done** if it failed, was stopped or cannot be addressed.
   - **Close** it when you no longer need to wake it.
-- **Questions answered in place.** When an agent asks you something (`AskUserQuestion`), the question appears at the top of the dashboard with a meow, played once per question.
+- **Show only some cats.** The counts at the top are buttons: **All**, **Working**, **Asleep** and **Waiting for you** list only those cats. Press the chosen one again to see all.
+- **Stop a cat.** A working cat has **■ Stop**, which asks you to confirm first. The main agent's turn is aborted; a subagent is stopped with `TaskStop`. A stopped cat keeps its **＋Skill** picker: hand it a skill and it reads the skill and resumes (a subagent is woken with `SendMessage`, so it needs a name).
+- **Delete a cat.** A cat that is not working has **🗑 Delete**. It leaves the dashboard and does not come back, even while Claude Code still lists the agent.
+- **A sound when an agent finishes or needs you.** `sounds/Hachimi.mp3` plays when an agent finishes its task, asks you something or waits for a permission. One clip plays at a time: agents finishing one after another sound once, and nothing is queued or layered while it plays. A cat you stopped does not sound.
+- **Questions answered in place.** When an agent asks you something (`AskUserQuestion`), the question appears at the top of the dashboard with the sound.
   - Pick an option, or type your own answer.
   - The engine's own dialog is replaced by a pointer to the dashboard. **Use the native dialog** is a fallback.
-  - Permission prompts appear too, with the same meow. Allow / Deny stays in the engine's own dialog: only the engine may grant a permission.
+  - Permission prompts appear too, with the same sound. Allow / Deny stays in the engine's own dialog: only the engine may grant a permission.
 - **Rename cats.** Give any cat a name of your own with **✎ Rename**.
 - **Skills:**
   - **＋Skill** on a cat hands it one of your installed skills. A running agent reads the request at its next step. A sleeping subagent is woken with it. An idle main agent gets it as a prompt.
@@ -59,14 +63,14 @@ The dashboard is in English by default. To switch it to Traditional Chinese (Can
 
 ## Things to know
 
-- **Mods are not sandboxed.** This one runs inside Claude Code with your permissions, like every mod. Read `hooks/register.tsx` before you install it. It makes no network calls and writes no files. The only external thing it touches is the bundled sound, `sounds/meow.wav`.
+- **Mods are not sandboxed.** This one runs inside Claude Code with your permissions, like every mod. Read `hooks/register.tsx` before you install it. It makes no network calls and writes no files. The only external thing it touches is the bundled sound, `sounds/Hachimi.mp3`.
 - **"Only" mode applies to every agent of the session**, the main one included.
 - **The dashboard holds still while you use it.** While you are in one of its dropdowns or text fields, its once-a-second updates wait, so an open dropdown does not jump back to its top.
   - This works in the terminal.
   - The desktop app does not say which element took focus, so there an open dropdown can still be redrawn while an agent is working.
   - When every agent is idle, the dashboard does not redraw at all.
 - **`/cats` prints a diagnostic line:** how many skills it found, how often the pane drew and the last focus moves.
-- **Playing the meow.** It uses Claude Code's own audio player. Where none is available you still get the toast.
+- **Playing the sound.** It uses Claude Code's own audio player, which a Windows or Linux terminal does not have. Where none is available you still get the toast.
 
 ## Development
 

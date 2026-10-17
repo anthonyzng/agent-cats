@@ -8,7 +8,16 @@ export type Strings = {
   commandDescription: string
   mainAgent: string
   status: { working: string; sleeping: string; closed: string }
-  counts: { working: string; sleeping: string; waiting: string }
+  counts: { all: string; working: string; sleeping: string; waiting: string }
+  noneInView: string
+  stop: string
+  stopConfirm: (name: string) => string
+  stopYes: string
+  stopFailed: (name: string, reason: string) => string
+  stoppedToast: (name: string) => string
+  stoppedNote: string
+  deleteCat: string
+  doneToast: (name: string) => string
   meowQuestion: string
   meowPermission: (tool: string) => string
   pointer: (title: string) => string
@@ -67,7 +76,16 @@ export const STRINGS: Record<Language, Strings> = {
     commandDescription: 'Open the Agent Cats dashboard',
     mainAgent: 'Main agent',
     status: { working: 'Working', sleeping: 'Asleep (can be woken)', closed: 'Done' },
-    counts: { working: 'Working', sleeping: 'Asleep', waiting: 'Waiting for you' },
+    counts: { all: 'All', working: 'Working', sleeping: 'Asleep', waiting: 'Waiting for you' },
+    noneInView: 'No cats in this view.',
+    stop: '■ Stop',
+    stopConfirm: name => `Stop "${name}"? Its current work ends now.`,
+    stopYes: 'Stop it',
+    stopFailed: (name, reason) => `Could not stop "${name}": ${reason}`,
+    stoppedToast: name => `Stopped "${name}". Hand it a skill to resume.`,
+    stoppedNote: 'Stopped: hand it a skill (＋Skill) to resume',
+    deleteCat: '🗑 Delete',
+    doneToast: name => `"${name}" finished its task`,
     meowQuestion: 'An agent has a question for you: answer it in the Agent Cats dashboard',
     meowPermission: tool => `An agent wants to use ${tool} and is waiting for your approval`,
     pointer: title => `Answer this question in the ${title} dashboard.`,
@@ -124,7 +142,16 @@ export const STRINGS: Record<Language, Strings> = {
     commandDescription: '打開 Agent 貓貓 dashboard',
     mainAgent: '主 agent',
     status: { working: '工作中', sleeping: '休眠（可喚醒）', closed: '已結束' },
-    counts: { working: '工作中', sleeping: '休眠', waiting: '等你回覆' },
+    counts: { all: '全部', working: '工作中', sleeping: '休眠', waiting: '等你回覆' },
+    noneInView: '呢個分類冇貓。',
+    stop: '■ 停止',
+    stopConfirm: name => `確定停止「${name}」？佢而家做緊嘅嘢會即刻停。`,
+    stopYes: '確定停止',
+    stopFailed: (name, reason) => `停唔到「${name}」：${reason}`,
+    stoppedToast: name => `已停止「${name}」，交個 skill 俾佢就會恢復工作。`,
+    stoppedNote: '已停止：用「＋Skill」交個 skill 俾佢就會恢復工作',
+    deleteCat: '🗑 刪除',
+    doneToast: name => `「${name}」完成咗任務`,
     meowQuestion: '有 agent 問你問題，喺 Agent 貓貓 dashboard 答',
     meowPermission: tool => `有 agent 想用 ${tool}，等你批准`,
     pointer: title => `呢條問題請喺「${title}」dashboard 回答。`,
