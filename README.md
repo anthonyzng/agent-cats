@@ -63,14 +63,14 @@ The dashboard is in English by default. To switch it to Traditional Chinese (Can
 
 ## Things to know
 
-- **Mods are not sandboxed.** This one runs inside Claude Code with your permissions, like every mod. Read `hooks/register.tsx` before you install it. It makes no network calls and writes no files. The only external thing it touches is the bundled sound, `sounds/Hachimi.mp3`.
+- **Mods are not sandboxed.** This one runs inside Claude Code with your permissions, like every mod. Read `hooks/register.tsx` before you install it. It makes no network calls and writes no files. The only external thing it touches is the bundled sound, `sounds/Hachimi.mp3`, and on Windows the one program it runs: `powershell.exe`, to play that sound.
 - **"Only" mode applies to every agent of the session**, the main one included.
 - **The dashboard holds still while you use it.** While you are in one of its dropdowns or text fields, its once-a-second updates wait, so an open dropdown does not jump back to its top.
   - This works in the terminal.
   - The desktop app does not say which element took focus, so there an open dropdown can still be redrawn while an agent is working.
   - When every agent is idle, the dashboard does not redraw at all.
 - **`/cats` prints a diagnostic line:** how many skills it found, how often the pane drew and the last focus moves.
-- **Playing the sound.** It uses Claude Code's own audio player, which a Windows or Linux terminal does not have. Where none is available you still get the toast.
+- **Playing the sound.** On macOS it uses Claude Code's own audio player. Claude Code has none on Windows, so there the mod plays the clip with PowerShell's MediaPlayer (`powershell.exe`, built into Windows). A Linux terminal has no player: there you still get the toast.
 
 ## Development
 

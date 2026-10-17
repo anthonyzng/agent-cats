@@ -169,6 +169,37 @@ const CHIME = 'sounds/Hachimi.mp3'
 // after another sound once until the clip has played through.
 let isChiming = false
 
+// Claude Code's own player (`afplay`) exists on macOS only: on Windows
+// `$.audio.play` skips the clip without an error. There the clip is played by
+// PowerShell's MediaPlayer (WPF), which reads mp3; it waits until the clip has
+// played through, so the one-clip-at-a-time rule holds there too. The path
+// goes in through the environment, never spliced into the script.
+const WINDOWS_PLAYER = [
+  'Add-Type -AssemblyName PresentationCore',
+  '$p = New-Object System.Windows.Media.MediaPlayer',
+  '$p.Open([uri]$env:AGENT_CATS_CLIP)',
+  '$t = 0',
+  'while (-not $p.NaturalDuration.HasTimeSpan -and $t -lt 40) { Start-Sleep -Milliseconds 50; $t++ }',
+  '$p.Play()',
+  '$ms = if ($p.NaturalDuration.HasTimeSpan) { $p.NaturalDuration.TimeSpan.TotalMilliseconds } else { 3000 }',
+  'Start-Sleep -Milliseconds ([int]$ms + 100)',
+  '$p.Close()',
+].join('; ')
+
+async function playChime($: EngineInterface): Promise<void> {
+  if ((await $.env.get('OS')) !== 'Windows_NT') {
+    await $.audio.play({ asset: CHIME })
+    return
+  }
+  const { exitCode, stderr } = await $.process.run(
+    ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', WINDOWS_PLAYER],
+    { env: { AGENT_CATS_CLIP: `${$.plugin.root}/${CHIME}` }, timeoutMs: 20_000 },
+  )
+  if (exitCode !== 0) {
+    throw new Error(`powershell exited ${exitCode}: ${stderr.trim()}`)
+  }
+}
+
 async function chime($: EngineInterface, text: string): Promise<void> {
   $.ui.toast(`🐱 ${text}`)
   if (isChiming) {
@@ -176,7 +207,7 @@ async function chime($: EngineInterface, text: string): Promise<void> {
   }
   isChiming = true
   try {
-    await $.audio.play({ asset: CHIME })
+    await playChime($)
   } catch (error) {
     $.ui.log(`agent-cats: could not play the chime (${String(error)})`, { to: 'debug' })
   } finally {

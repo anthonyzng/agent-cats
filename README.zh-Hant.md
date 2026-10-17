@@ -72,14 +72,14 @@ Claude Code 會將個選擇存喺 `~/.claude/settings.json` 嘅 `pluginConfigs`�
 
 ## 要留意嘅地方
 
-- **Mods 冇 sandbox。** 同所有 mod 一樣，呢個 mod 喺 Claude Code 入面用你嘅權限行。安裝之前請先睇 `hooks/register.tsx`。佢唔會上網，亦唔會寫任何檔案；唯一用到嘅外部檔案係內附嘅聲音檔 `sounds/Hachimi.mp3`。
+- **Mods 冇 sandbox。** 同所有 mod 一樣，呢個 mod 喺 Claude Code 入面用你嘅權限行。安裝之前請先睇 `hooks/register.tsx`。佢唔會上網，亦唔會寫任何檔案；唯一用到嘅外部檔案係內附嘅聲音檔 `sounds/Hachimi.mp3`，而喺 Windows 佢只會行一個程式：用 `powershell.exe` 播呢個聲。
 - **「只准用」模式對成個 session 所有 agent 都生效**，包括主 agent。
 - **你用緊 dashboard 嘅時候，佢唔會郁。** 你喺下拉選單或者輸入框入面嗰陣，每秒一次嘅更新會暫停，所以打開咗嘅選單唔會跳返最頂。
   - Terminal 版做得到。
   - Desktop app 唔會講係邊個元素攞咗 focus，所以喺 desktop，agent 做緊嘢嗰陣，打開咗嘅下拉選單仍然可能被重新畫。
   - 所有 agent 都閒住嘅時候，dashboard 完全唔會重新畫。
 - **`/cats` 會印一行診斷**：搵到幾多個 skill、pane 畫咗幾多次，同埋最近嘅 focus 變化。
-- **播聲音。** 用 Claude Code 自己嘅播放器，Windows 或者 Linux 嘅 terminal 冇播放器；冇播放器嘅環境就只會出 toast 通知。
+- **播聲音。** macOS 用 Claude Code 自己嘅播放器。Windows 上面 Claude Code 冇播放器，所以 mod 會用 PowerShell 嘅 MediaPlayer（Windows 內置嘅 `powershell.exe`）播。Linux 嘅 terminal 冇播放器，只會出 toast 通知。
 
 ## 開發
 
