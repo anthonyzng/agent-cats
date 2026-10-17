@@ -12,7 +12,7 @@
   - 唔使再叫醒佢，就撳**關閉**。
 - **只睇某類貓。** 頂部嘅數字係掣：**全部**、**工作中**、**休眠**、**等你回覆**，撳咗就只顯示嗰類貓；再撳一次揀咗嗰個就返去睇全部。
 - **停止一隻貓。** 工作中嘅貓有 **■ 停止**，撳咗會先問你確認。主 agent 會中止嗰一輪，subagent 會用 `TaskStop` 停止。停咗嘅貓仍然有 **＋Skill** 選單：交個 skill 俾佢，佢讀完就會繼續做（subagent 用 `SendMessage` 喚醒，所以佢要有名）。
-- **刪除一隻貓。** 唔係工作中嘅貓有 **🗑 刪除**，撳咗佢就會由 dashboard 消失，就算 Claude Code 仲列住呢個 agent 都唔會再出現。
+- **刪除一隻貓。** 每隻 subagent 嘅貓都有 **🗑 刪除**，撳咗佢就會由 dashboard 消失，就算 Claude Code 仲列住呢個 agent 都唔會再出現。仲做緊嘢嘅貓會先叫你確認，停咗佢先清走。Claude Code 已經冇再列出嘅 subagent 會標做已結束，唔會一直卡喺工作中。主 agent 刪唔到。
 - **Agent 完成或者等你嗰陣會出聲。** Agent 完成任務、問你問題或者等權限嗰陣，會播 `sounds/Hachimi.mp3`。同一時間只會播一段：幾個 agent 接連完成都只會響一次，播緊嗰陣唔會排隊亦唔會疊埋一齊播。你自己停咗嘅貓唔會響。
 - **喺 dashboard 直接答問題。** Agent 問你嘢（`AskUserQuestion`）嗰陣，問題會出喺 dashboard 頂部，同時會出聲提你。
   - 撳一個選項，或者自己打答案。
@@ -72,14 +72,14 @@ Claude Code 會將個選擇存喺 `~/.claude/settings.json` 嘅 `pluginConfigs`�
 
 ## 要留意嘅地方
 
-- **Mods 冇 sandbox。** 同所有 mod 一樣，呢個 mod 喺 Claude Code 入面用你嘅權限行。安裝之前請先睇 `hooks/register.tsx`。佢唔會上網，亦唔會寫任何檔案；唯一用到嘅外部檔案係內附嘅聲音檔 `sounds/Hachimi.mp3`。
+- **Mods 冇 sandbox。** 同所有 mod 一樣，呢個 mod 喺 Claude Code 入面用你嘅權限行。安裝之前請先睇 `hooks/register.tsx`。佢唔會上網，亦唔會寫任何檔案；唯一用到嘅外部檔案係內附嘅聲音檔 `sounds/Hachimi.mp3`，而喺 Windows 佢只會行一個程式：用 `powershell.exe` 播呢個聲。
 - **「只准用」模式對成個 session 所有 agent 都生效**，包括主 agent。
 - **你用緊 dashboard 嘅時候，佢唔會郁。** 你喺下拉選單或者輸入框入面嗰陣，每秒一次嘅更新會暫停，所以打開咗嘅選單唔會跳返最頂。
   - Terminal 版做得到。
   - Desktop app 唔會講係邊個元素攞咗 focus，所以喺 desktop，agent 做緊嘢嗰陣，打開咗嘅下拉選單仍然可能被重新畫。
   - 所有 agent 都閒住嘅時候，dashboard 完全唔會重新畫。
 - **`/cats` 會印一行診斷**：搵到幾多個 skill、pane 畫咗幾多次，同埋最近嘅 focus 變化。
-- **播聲音。** 用 Claude Code 自己嘅播放器，Windows 或者 Linux 嘅 terminal 冇播放器；冇播放器嘅環境就只會出 toast 通知。
+- **播聲音。** macOS 用 Claude Code 自己嘅播放器。Windows 上面 Claude Code 冇播放器，所以 mod 會用 PowerShell 嘅 MediaPlayer（Windows 內置嘅 `powershell.exe`）播。Linux 嘅 terminal 冇播放器，只會出 toast 通知。
 
 ## 開發
 

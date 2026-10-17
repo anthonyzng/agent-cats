@@ -16,9 +16,10 @@ type Info = { id: string; description: string; type: string; status: string; nam
 
 // The engine as the dashboard sees it: an agent list the test changes, a held
 // audio player, and a record of the stops and plays.
-function engine(on: any, list: { value: Info[] }) {
+function engine(on: any, list: { value: Info[] }, os?: string) {
   const clock = mock.clock(on)
   const plays: string[] = []
+  const runs: { argv: string[]; clip: string }[] = []
   const stops: string[] = []
   const aborts: string[] = []
   const toasts: string[] = []
@@ -47,6 +48,11 @@ function engine(on: any, list: { value: Info[] }) {
       release = () => resolve({ value: undefined })
     })
   })
+  on('env.get', (_$: any, e: any) => ({ value: e.name === 'OS' ? os : undefined }))
+  on('process.run', (_$: any, e: any) => {
+    runs.push({ argv: [...e.argv], clip: e.init?.env?.AGENT_CATS_CLIP ?? '' })
+    return { value: { exitCode: 0, stdout: '', stderr: '' } }
+  })
   on('tool.call', (_$: any, e: any) => {
     if (e.tool === 'TaskStop') {
       stops.push(e.task_id)
@@ -54,7 +60,7 @@ function engine(on: any, list: { value: Info[] }) {
     return { result: 'ok', text: 'ok' }
   })
 
-  return { clock, plays, stops, aborts, toasts, done: () => release() }
+  return { clock, plays, runs, stops, aborts, toasts, done: () => release() }
 }
 
 async function mountPane($: any, surface: 'desktop' | 'terminal') {
@@ -180,4 +186,61 @@ test('finishing agents chime once at a time: no overlap, no queue', async ($: an
   await $.turn.complete({ answer: 'done', durationMs: 5, reason: 'answer', turnId: 't2' } as never)
   console.log(`plays: ${eng.plays.join(', ')}`)
   expect(eng.plays.length).toBe(2)
+})
+
+test('a cat still working can be deleted: confirmed, stopped, then removed', async ($: any, on: any) => {
+  const list = { value: [{ id: 'a1', description: 'stuck task', type: 'Explore', status: 'running', name: 'cat-a' }] }
+  const eng = engine(on, list)
+  await $.session.start({ source: 'startup', cwd: '.' })
+  await eng.clock.advance(1500)
+  const ui = await mountPane($, 'desktop')
+
+  await ui.press({ key: 'delete-a1' })
+  // A working cat asks first: nothing stopped or removed yet.
+  expect(eng.stops).toEqual([])
+  expect(await ui.find({ key: 'delete-yes-a1' })).toBeTruthy()
+
+  await ui.press({ key: 'delete-yes-a1' })
+  expect(eng.stops).toEqual(['a1'])
+  expect(await ui.find({ key: 'agent-a1' })).toBeFalsy()
+  // The engine still lists it: it does not come back.
+  await eng.clock.advance(1500)
+  expect(await ui.find({ key: 'agent-a1' })).toBeFalsy()
+  await ui.unmount()
+})
+
+test('a working subagent the engine no longer lists is closed, not left working', async ($: any, on: any) => {
+  const list = { value: [{ id: 'a1', description: 'gone task', type: 'Explore', status: 'running', name: 'cat-a' }] }
+  const eng = engine(on, list)
+  await $.session.start({ source: 'startup', cwd: '.' })
+  await eng.clock.advance(1500)
+
+  const ui = await mountPane($, 'desktop')
+  expect(await ui.find({ key: 'stop-a1' })).toBeTruthy()
+
+  list.value = []
+  await eng.clock.advance(1500)
+  // No Stop left on it, and Delete deletes at once: no confirmation, no TaskStop.
+  expect(await ui.find({ key: 'stop-a1' })).toBeFalsy()
+  await ui.press({ key: 'delete-a1' })
+  expect(eng.stops).toEqual([])
+  expect(await ui.find({ key: 'agent-a1' })).toBeFalsy()
+  await ui.unmount()
+})
+
+test('on Windows the chime is played by PowerShell, not the engine player', async ($: any, on: any) => {
+  const list = { value: [{ id: 'a1', description: 'one', type: 'Explore', status: 'running', name: 'cat-a' }] }
+  const eng = engine(on, list, 'Windows_NT')
+  await $.session.start({ source: 'startup', cwd: '.' })
+  await eng.clock.advance(1500)
+
+  list.value = list.value.map(a => ({ ...a, status: 'completed' }))
+  await eng.clock.advance(1500)
+  expect(eng.plays).toEqual([])
+  expect(eng.runs.length).toBe(1)
+  const [run] = eng.runs
+  expect(run?.argv[0]).toBe('powershell.exe')
+  expect(run?.clip.endsWith('/sounds/Hachimi.mp3')).toBe(true)
+  // The path rides in the environment, never in the script.
+  expect(run?.argv.join(' ').includes('Hachimi')).toBe(false)
 })

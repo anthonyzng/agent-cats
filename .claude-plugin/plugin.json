@@ -1,6 +1,6 @@
 {
   "name": "agent-cats",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A dashboard of the session's agents as coloured cats: their tasks, skills and run time, their questions answered in place with a meow, and the skills each task uses",
   "author": {
     "name": "anthonyzng",

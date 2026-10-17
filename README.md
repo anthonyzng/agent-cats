@@ -12,7 +12,7 @@ A [Claude Code](https://claude.com/claude-code) mod that turns the agents of a s
   - **Close** it when you no longer need to wake it.
 - **Show only some cats.** The counts at the top are buttons: **All**, **Working**, **Asleep** and **Waiting for you** list only those cats. Press the chosen one again to see all.
 - **Stop a cat.** A working cat has **■ Stop**, which asks you to confirm first. The main agent's turn is aborted; a subagent is stopped with `TaskStop`. A stopped cat keeps its **＋Skill** picker: hand it a skill and it reads the skill and resumes (a subagent is woken with `SendMessage`, so it needs a name).
-- **Delete a cat.** A cat that is not working has **🗑 Delete**. It leaves the dashboard and does not come back, even while Claude Code still lists the agent.
+- **Delete a cat.** Every subagent's cat has **🗑 Delete**. It leaves the dashboard and does not come back, even while Claude Code still lists the agent. A cat still working asks you to confirm first, and is stopped before it is removed. A subagent that Claude Code no longer lists is marked done, so it never stays stuck as working. The main agent cannot be deleted.
 - **A sound when an agent finishes or needs you.** `sounds/Hachimi.mp3` plays when an agent finishes its task, asks you something or waits for a permission. One clip plays at a time: agents finishing one after another sound once, and nothing is queued or layered while it plays. A cat you stopped does not sound.
 - **Questions answered in place.** When an agent asks you something (`AskUserQuestion`), the question appears at the top of the dashboard with the sound.
   - Pick an option, or type your own answer.
@@ -63,14 +63,14 @@ The dashboard is in English by default. To switch it to Traditional Chinese (Can
 
 ## Things to know
 
-- **Mods are not sandboxed.** This one runs inside Claude Code with your permissions, like every mod. Read `hooks/register.tsx` before you install it. It makes no network calls and writes no files. The only external thing it touches is the bundled sound, `sounds/Hachimi.mp3`.
+- **Mods are not sandboxed.** This one runs inside Claude Code with your permissions, like every mod. Read `hooks/register.tsx` before you install it. It makes no network calls and writes no files. The only external thing it touches is the bundled sound, `sounds/Hachimi.mp3`, and on Windows the one program it runs: `powershell.exe`, to play that sound.
 - **"Only" mode applies to every agent of the session**, the main one included.
 - **The dashboard holds still while you use it.** While you are in one of its dropdowns or text fields, its once-a-second updates wait, so an open dropdown does not jump back to its top.
   - This works in the terminal.
   - The desktop app does not say which element took focus, so there an open dropdown can still be redrawn while an agent is working.
   - When every agent is idle, the dashboard does not redraw at all.
 - **`/cats` prints a diagnostic line:** how many skills it found, how often the pane drew and the last focus moves.
-- **Playing the sound.** It uses Claude Code's own audio player, which a Windows or Linux terminal does not have. Where none is available you still get the toast.
+- **Playing the sound.** On macOS it uses Claude Code's own audio player. Claude Code has none on Windows, so there the mod plays the clip with PowerShell's MediaPlayer (`powershell.exe`, built into Windows). A Linux terminal has no player: there you still get the toast.
 
 ## Development
 

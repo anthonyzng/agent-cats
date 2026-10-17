@@ -169,6 +169,37 @@ const CHIME = 'sounds/Hachimi.mp3'
 // after another sound once until the clip has played through.
 let isChiming = false
 
+// Claude Code's own player (`afplay`) exists on macOS only: on Windows
+// `$.audio.play` skips the clip without an error. There the clip is played by
+// PowerShell's MediaPlayer (WPF), which reads mp3; it waits until the clip has
+// played through, so the one-clip-at-a-time rule holds there too. The path
+// goes in through the environment, never spliced into the script.
+const WINDOWS_PLAYER = [
+  'Add-Type -AssemblyName PresentationCore',
+  '$p = New-Object System.Windows.Media.MediaPlayer',
+  '$p.Open([uri]$env:AGENT_CATS_CLIP)',
+  '$t = 0',
+  'while (-not $p.NaturalDuration.HasTimeSpan -and $t -lt 40) { Start-Sleep -Milliseconds 50; $t++ }',
+  '$p.Play()',
+  '$ms = if ($p.NaturalDuration.HasTimeSpan) { $p.NaturalDuration.TimeSpan.TotalMilliseconds } else { 3000 }',
+  'Start-Sleep -Milliseconds ([int]$ms + 100)',
+  '$p.Close()',
+].join('; ')
+
+async function playChime($: EngineInterface): Promise<void> {
+  if ((await $.env.get('OS')) !== 'Windows_NT') {
+    await $.audio.play({ asset: CHIME })
+    return
+  }
+  const { exitCode, stderr } = await $.process.run(
+    ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', WINDOWS_PLAYER],
+    { env: { AGENT_CATS_CLIP: `${$.plugin.root}/${CHIME}` }, timeoutMs: 20_000 },
+  )
+  if (exitCode !== 0) {
+    throw new Error(`powershell exited ${exitCode}: ${stderr.trim()}`)
+  }
+}
+
 async function chime($: EngineInterface, text: string): Promise<void> {
   $.ui.toast(`🐱 ${text}`)
   if (isChiming) {
@@ -176,7 +207,7 @@ async function chime($: EngineInterface, text: string): Promise<void> {
   }
   isChiming = true
   try {
-    await $.audio.play({ asset: CHIME })
+    await playChime($)
   } catch (error) {
     $.ui.log(`agent-cats: could not play the chime (${String(error)})`, { to: 'debug' })
   } finally {
@@ -331,14 +362,23 @@ async function stopAgent($: EngineInterface, row: CatAgent): Promise<void> {
   $.ui.toast(`🐱 ${t.stoppedToast(nameOf(row))}`)
 }
 
-// Deletes a cat that is not working: removed now, and remembered so that the
-// engine's own list (which keeps an agent for a while) never brings it back.
-async function deleteAgent($: EngineInterface, id: string): Promise<void> {
-  if (id === MAIN) {
+// Deletes a subagent's cat: removed now, and remembered so that the engine's
+// own list (which keeps an agent for a while) never brings it back. A cat
+// still marked working is stopped first; a stop that fails (the agent is
+// already gone, its cat left marked working) does not keep the cat.
+async function deleteAgent($: EngineInterface, row: CatAgent): Promise<void> {
+  if (row.id === MAIN) {
     return
   }
-  await update($, deleted, list => [...new Set([...(list ?? []), id])])
-  await changeAgents($, rows => rows.filter(r => r.id !== id || r.status === 'working'))
+  if (row.status === 'working' && !row.isStopped) {
+    try {
+      await $.tool.call({ tool: 'TaskStop', task_id: row.id } as never)
+    } catch (error) {
+      $.ui.log(`agent-cats: could not stop ${row.id} before deleting it (${String(error)})`, { to: 'debug' })
+    }
+  }
+  await update($, deleted, list => [...new Set([...(list ?? []), row.id])])
+  await changeAgents($, rows => rows.filter(r => r.id !== row.id))
 }
 
 async function sync($: EngineInterface): Promise<void> {
@@ -358,7 +398,14 @@ async function sync($: EngineInterface): Promise<void> {
     const next = current.map(row => {
       const info = list.find(a => a.id === row.id)
       if (!info) {
-        return row
+        // A subagent the engine no longer lists has ended: a cat left
+        // working would show Stop forever and never Delete.
+        if (row.id === MAIN || row.status !== 'working') {
+          return row
+        }
+        changed = true
+
+        return { ...row, status: 'closed' as CatStatus, endedAt: row.endedAt ?? now, tool: undefined }
       }
       const status = catStatusOf(info)
       if (status === row.status && info.status === row.rawStatus && info.name === row.name) {
@@ -986,8 +1033,32 @@ export const register: Register = (on, options) => {
                 />
               </Box>
             )}
-            {r.id !== MAIN && r.status !== 'working' && (
-              <Button key={`delete-${r.id}`} label={t.deleteCat} plain onPress={() => deleteAgent($, r.id)} />
+            {r.id !== MAIN && stopping !== `delete:${r.id}` && (
+              <Button
+                key={`delete-${r.id}`}
+                label={t.deleteCat}
+                plain
+                onPress={() =>
+                  r.status === 'working' && !r.isStopped
+                    ? update($, confirmStop, () => `delete:${r.id}`)
+                    : deleteAgent($, r)
+                }
+              />
+            )}
+            {r.id !== MAIN && stopping === `delete:${r.id}` && (
+              <Box flexDirection="row" gap={1} alignItems="center" flexWrap="wrap">
+                <Text color="#E76F51">{t.deleteConfirm(nameOf(r))}</Text>
+                <Button
+                  key={`delete-yes-${r.id}`}
+                  label={t.deleteYes}
+                  variant="primary"
+                  onPress={async () => {
+                    await update($, confirmStop, () => '')
+                    await deleteAgent($, r)
+                  }}
+                />
+                <Button key={`delete-no-${r.id}`} label={t.cancel} plain onPress={() => update($, confirmStop, () => '')} />
+              </Box>
             )}
           </Box>
         ))}

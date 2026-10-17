@@ -58,7 +58,7 @@ declare module 'claude-code' {
       skillFilter: string
       renaming: string
       view: CatView
-      /** The cat whose Stop waits for the person's confirmation, or ''. */
+      /** The cat whose Stop waits for the person's confirmation (`delete:<id>` for a Delete of a working cat), or ''. */
       confirmStop: string
       /** Cats deleted from the dashboard: never listed again, even while the engine still lists them. */
       deleted: string[]
