@@ -21,6 +21,7 @@ export type Strings = {
   deleteYes: string
   doneToast: (name: string) => string
   meowQuestion: string
+  meowPlan: string
   meowPermission: (tool: string) => string
   pointer: (title: string) => string
   answerHere: string
@@ -91,6 +92,7 @@ export const STRINGS: Record<Language, Strings> = {
     deleteYes: 'Stop and delete',
     doneToast: name => `"${name}" finished its task`,
     meowQuestion: 'An agent has a question for you: answer it in the Agent Cats dashboard',
+    meowPlan: 'A plan is waiting for your approval',
     meowPermission: tool => `An agent wants to use ${tool} and is waiting for your approval`,
     pointer: title => `Answer this question in the ${title} dashboard.`,
     answerHere: 'Answer here',
@@ -159,6 +161,7 @@ export const STRINGS: Record<Language, Strings> = {
     deleteYes: '停止並刪除',
     doneToast: name => `「${name}」完成咗任務`,
     meowQuestion: '有 agent 問你問題，喺 Agent 貓貓 dashboard 答',
+    meowPlan: '有個計劃等緊你批准',
     meowPermission: tool => `有 agent 想用 ${tool}，等你批准`,
     pointer: title => `呢條問題請喺「${title}」dashboard 回答。`,
     answerHere: '喺呢度答',
