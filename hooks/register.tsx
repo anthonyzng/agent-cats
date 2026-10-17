@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { CatAgent, CatPending, CatQuestion, CatStatus, SkillMode } from '../types'
+import type { CatAgent, CatPending, CatQuestion, CatStatus, CatView, SkillMode } from '../types'
 
 import { STRINGS, languageOf } from './strings'
 import type { Strings } from './strings'
@@ -25,6 +25,12 @@ const skillMode = atom({ plugin: 'agent-cats', key: 'skillMode' } as const, 'pre
 const skillFilter = atom({ plugin: 'agent-cats', key: 'skillFilter' } as const, '')
 
 const renaming = atom({ plugin: 'agent-cats', key: 'renaming' } as const, '')
+const view = atom({ plugin: 'agent-cats', key: 'view' } as const, 'all' as CatView)
+const confirmStop = atom({ plugin: 'agent-cats', key: 'confirmStop' } as const, '')
+const deleted = atom({ plugin: 'agent-cats', key: 'deleted' } as const, [])
+
+// The main loop's running turn, which Stop aborts; set by `turn.start`.
+let mainTurnId: string | undefined
 
 // While the person is in one of the dashboard's pickers or text fields, the
 // once-a-second clock redraw would redraw it under them (an open dropdown
@@ -157,12 +163,24 @@ function describeInput(input: unknown): string {
   return ''
 }
 
-async function meow($: EngineInterface, text: string): Promise<void> {
+const CHIME = 'sounds/Hachimi.mp3'
+// One clip at a time for the whole module: while it plays, every other request
+// is dropped (never queued, never layered), so agents finishing or asking one
+// after another sound once until the clip has played through.
+let isChiming = false
+
+async function chime($: EngineInterface, text: string): Promise<void> {
   $.ui.toast(`🐱 ${text}`)
+  if (isChiming) {
+    return
+  }
+  isChiming = true
   try {
-    await $.audio.play({ asset: 'sounds/meow.wav' })
+    await $.audio.play({ asset: CHIME })
   } catch (error) {
-    $.ui.log(`agent-cats: could not play the meow (${String(error)})`, { to: 'debug' })
+    $.ui.log(`agent-cats: could not play the chime (${String(error)})`, { to: 'debug' })
+  } finally {
+    isChiming = false
   }
 }
 
@@ -259,7 +277,10 @@ function skillNote(active: readonly string[], mode: SkillMode): string {
 // step, a sleeping subagent is woken with it, an idle main agent gets a prompt.
 async function giveSkill($: EngineInterface, row: CatAgent, skill: string): Promise<void> {
   const ask = `The user asks you, from the Agent Cats dashboard, to load the skill "${skill}" with the Skill tool now and use it for your current task.`
-  if (row.status === 'working') {
+  if (row.isStopped) {
+    await patchAgent($, row.id, r => ({ ...r, isStopped: undefined }))
+  }
+  if (row.status === 'working' && !row.isStopped) {
     await $.session.append({
       message: { type: 'user', content: [{ type: 'text', text: ask }] },
       ...(row.id === MAIN ? {} : { agentId: row.id }),
@@ -278,16 +299,61 @@ async function giveSkill($: EngineInterface, row: CatAgent, skill: string): Prom
   $.ui.toast(`🐱 ${t.skillGiven(row.nickname || row.label || t.mainAgent, skill)}`)
 }
 
+function nameOf(row: CatAgent): string {
+  return row.nickname || row.label || t.mainAgent
+}
+
+// Stops one cat: the main loop's turn is aborted; a subagent is stopped with
+// TaskStop (it takes an agent id). Either way the cat is marked stopped, so
+// the end is not chimed as a finished task and a skill handed to it resumes it.
+async function stopAgent($: EngineInterface, row: CatAgent): Promise<void> {
+  const now = await $.clock.now()
+  try {
+    if (row.id === MAIN) {
+      if (mainTurnId) {
+        await $.turn.abort({ turnId: mainTurnId })
+      }
+    } else {
+      await $.tool.call({ tool: 'TaskStop', task_id: row.id } as never)
+    }
+  } catch (error) {
+    $.ui.toast(`🐱 ${t.stopFailed(nameOf(row), String(error))}`)
+
+    return
+  }
+  await patchAgent($, row.id, r => ({
+    ...r,
+    isStopped: true,
+    status: r.id === MAIN ? 'sleeping' : r.status,
+    endedAt: r.endedAt ?? now,
+    tool: undefined,
+  }))
+  $.ui.toast(`🐱 ${t.stoppedToast(nameOf(row))}`)
+}
+
+// Deletes a cat that is not working: removed now, and remembered so that the
+// engine's own list (which keeps an agent for a while) never brings it back.
+async function deleteAgent($: EngineInterface, id: string): Promise<void> {
+  if (id === MAIN) {
+    return
+  }
+  await update($, deleted, list => [...new Set([...(list ?? []), id])])
+  await changeAgents($, rows => rows.filter(r => r.id !== id || r.status === 'working'))
+}
+
 async function sync($: EngineInterface): Promise<void> {
   // The person is in a picker: nothing redraws under them; the next tick
   // after the hold catches up (end times are then a second or so late).
   if (await isHolding($)) {
     return
   }
-  const list = await $.agent.list()
+  const gone = new Set(await read($, deleted))
+  const list = (await $.agent.list()).filter(a => !gone.has(a.id))
   const now = await $.clock.now()
+  let finished: string[] = []
 
   await changeAgents($, current => {
+    finished = []
     let changed = false
     const next = current.map(row => {
       const info = list.find(a => a.id === row.id)
@@ -300,6 +366,9 @@ async function sync($: EngineInterface): Promise<void> {
       }
       changed = true
       const isWoken = status === 'working' && row.status !== 'working'
+      if (row.status === 'working' && status !== 'working' && info.status === 'completed' && !row.isStopped) {
+        finished.push(nameOf(row))
+      }
 
       return {
         ...row,
@@ -311,6 +380,7 @@ async function sync($: EngineInterface): Promise<void> {
         endedAt: status === 'working' ? undefined : (row.endedAt ?? now),
         tool: status === 'working' ? row.tool : undefined,
         isHidden: isWoken ? false : row.isHidden,
+        isStopped: isWoken ? undefined : row.isStopped,
       }
     })
     const known = new Set(current.map(r => r.id))
@@ -335,6 +405,10 @@ async function sync($: EngineInterface): Promise<void> {
 
     return changed || added.length > 0 ? [...next, ...added] : current
   })
+
+  if (finished.length > 0) {
+    void chime($, finished.map(name => t.doneToast(name)).join(' · '))
+  }
 
   const rows = await read($, agents)
   const waits = await read($, pending)
@@ -398,6 +472,9 @@ export const register: Register = (on, options) => {
   })
 
   on('turn.start', async ($, e, next) => {
+    if (e.agentId === undefined) {
+      mainTurnId = e.turnId
+    }
     const now = await $.clock.now()
     const text = e.text.trim().replace(/\s+/g, ' ')
     await setMain($, row => ({
@@ -408,6 +485,7 @@ export const register: Register = (on, options) => {
       startedAt: now,
       endedAt: undefined,
       skills: [],
+      isStopped: undefined,
     }))
 
     return next(e)
@@ -415,8 +493,13 @@ export const register: Register = (on, options) => {
 
   on('turn.complete', async ($, e, next) => {
     if (e.agentId === undefined) {
+      mainTurnId = undefined
       const now = await $.clock.now()
+      const before = (await read($, agents)).find(r => r.id === MAIN)
       await setMain($, row => ({ ...row, status: 'sleeping', rawStatus: 'idle', endedAt: now, tool: undefined }))
+      if (e.reason === 'answer' && before && !before.isStopped) {
+        void chime($, t.doneToast(nameOf(before)))
+      }
     }
 
     return next(e)
@@ -477,7 +560,7 @@ export const register: Register = (on, options) => {
     }
     await update($, pending, list => [...(list ?? []), item])
     void $.ui.open({ id: PANE, title: t.title, focus: true })
-    void meow($, t.meowQuestion)
+    void chime($, t.meowQuestion)
 
     try {
       const won = await Promise.race([
@@ -511,7 +594,7 @@ export const register: Register = (on, options) => {
     }
     await update($, pending, list => [...(list ?? []), item])
     void $.ui.open({ id: PANE, title: t.title })
-    void meow($, t.meowPermission(e.tool_name))
+    void chime($, t.meowPermission(e.tool_name))
 
     return next(e)
   })
@@ -549,6 +632,8 @@ export const register: Register = (on, options) => {
     const mode = await read($, skillMode)
     const filter = await read($, skillFilter)
     const editing = await read($, renaming)
+    const shown = await read($, view)
+    const stopping = await read($, confirmStop)
     const rows = await read($, agents)
     const waits = await read($, pending)
     const now = Math.max(await read($, clockNow), ...rows.map(r => r.endedAt ?? r.startedAt))
@@ -597,22 +682,35 @@ export const register: Register = (on, options) => {
 
     const working = rows.filter(r => r.status === 'working').length
     const sleeping = rows.filter(r => r.status === 'sleeping').length
-    const visible = rows.filter(r => !r.isHidden)
+    const waitingIds = new Set(waits.map(p => p.agentId))
+    const inView = (r: CatAgent) =>
+      shown === 'working'
+        ? r.status === 'working'
+        : shown === 'sleeping'
+          ? r.status === 'sleeping'
+          : shown === 'waiting'
+            ? waitingIds.has(r.id)
+            : true
+    const visible = rows.filter(r => !r.isHidden && inView(r))
+    // Pressing the view already chosen goes back to all.
+    const viewButton = (which: CatView, label: string) => (
+      <Button
+        key={`view-${which}`}
+        label={label}
+        variant={shown === which ? 'primary' : 'secondary'}
+        onPress={() => update($, view, current => (current === which ? 'all' : which))}
+      />
+    )
     const hiddenClosed = rows.some(r => r.status === 'closed' && !r.isHidden)
 
     return (
       <Box flexDirection="column" gap={1}>
-        <Box flexDirection="row" gap={2}>
+        <Box flexDirection="row" gap={1} alignItems="center" flexWrap="wrap">
           <Text bold>🐾 {t.title}</Text>
-          <Text color={STATUS_COLOR.working}>
-            {t.counts.working} {working}
-          </Text>
-          <Text color={STATUS_COLOR.sleeping}>
-            {t.counts.sleeping} {sleeping}
-          </Text>
-          <Text color={waits.length > 0 ? '#E76F51' : '#888888'}>
-            {t.counts.waiting} {waits.length}
-          </Text>
+          {viewButton('all', `${t.counts.all} ${rows.filter(r => !r.isHidden).length}`)}
+          {viewButton('working', `${t.counts.working} ${working}`)}
+          {viewButton('sleeping', `${t.counts.sleeping} ${sleeping}`)}
+          {viewButton('waiting', `${t.counts.waiting} ${waits.length}`)}
         </Box>
 
         <Box flexDirection="column" gap={1} borderStyle="round" borderColor="#4D96FF" paddingX={1}>
@@ -784,7 +882,7 @@ export const register: Register = (on, options) => {
           </Box>
         )}
 
-        {visible.length === 0 && <Text dimColor>{t.noAgents}</Text>}
+        {visible.length === 0 && <Text dimColor>{rows.length === 0 ? t.noAgents : t.noneInView}</Text>}
         {visible.map(r => (
           <Box key={`agent-${r.id}`} flexDirection="column" borderStyle="round" borderColor={r.color} paddingX={1}>
             <Box flexDirection="row" gap={1} alignItems="center">
@@ -824,10 +922,31 @@ export const register: Register = (on, options) => {
               <Text dimColor>{r.type}</Text>
               {r.tool && <Text color="#4D96FF">{t.usingTool(r.tool)}</Text>}
             </Box>
+            {r.isStopped && <Text color="#E76F51">{t.stoppedNote}</Text>}
+            {r.status === 'working' && !r.isStopped && stopping !== r.id && (
+              <Box flexDirection="row" gap={1}>
+                <Button key={`stop-${r.id}`} label={t.stop} onPress={() => update($, confirmStop, () => r.id)} />
+              </Box>
+            )}
+            {r.status === 'working' && !r.isStopped && stopping === r.id && (
+              <Box flexDirection="row" gap={1} alignItems="center" flexWrap="wrap">
+                <Text color="#E76F51">{t.stopConfirm(nameOf(r))}</Text>
+                <Button
+                  key={`stop-yes-${r.id}`}
+                  label={t.stopYes}
+                  variant="primary"
+                  onPress={async () => {
+                    await update($, confirmStop, () => '')
+                    await stopAgent($, r)
+                  }}
+                />
+                <Button key={`stop-no-${r.id}`} label={t.cancel} plain onPress={() => update($, confirmStop, () => '')} />
+              </Box>
+            )}
             <Text dimColor={r.skills.length === 0}>
               {t.skillsUsed(r.skills.length > 0 ? r.skills.join(t.skillsSeparator) : t.skillsNone)}
             </Text>
-            {Select && r.status !== 'closed' && installed.length > 0 && (
+            {Select && (r.status !== 'closed' || r.isStopped) && installed.length > 0 && (
               <Select
                 key={`give-${r.id}`}
                 label={t.giveSkill}
@@ -866,6 +985,9 @@ export const register: Register = (on, options) => {
                   }
                 />
               </Box>
+            )}
+            {r.id !== MAIN && r.status !== 'working' && (
+              <Button key={`delete-${r.id}`} label={t.deleteCat} plain onPress={() => deleteAgent($, r.id)} />
             )}
           </Box>
         ))}

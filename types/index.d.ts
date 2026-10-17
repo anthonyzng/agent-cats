@@ -1,5 +1,8 @@
 export type CatStatus = 'working' | 'sleeping' | 'closed'
 
+/** Which cats the dashboard lists: all, or only those working, asleep or waiting for the person. */
+export type CatView = 'all' | 'working' | 'sleeping' | 'waiting'
+
 /** `prefer`: the chosen skills are suggested; `only`: any other skill is refused. */
 export type SkillMode = 'prefer' | 'only'
 
@@ -18,6 +21,8 @@ export type CatAgent = {
   skills: string[]
   tool?: string
   isHidden?: boolean
+  /** Stopped from the dashboard: not a finished task (no chime); a skill handed to it resumes it. */
+  isStopped?: boolean
 }
 
 export type CatQuestion = {
@@ -52,6 +57,11 @@ declare module 'claude-code' {
       skillMode: SkillMode
       skillFilter: string
       renaming: string
+      view: CatView
+      /** The cat whose Stop waits for the person's confirmation, or ''. */
+      confirmStop: string
+      /** Cats deleted from the dashboard: never listed again, even while the engine still lists them. */
+      deleted: string[]
     }
   }
 }
