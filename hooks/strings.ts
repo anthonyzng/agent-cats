@@ -17,6 +17,8 @@ export type Strings = {
   stoppedToast: (name: string) => string
   stoppedNote: string
   deleteCat: string
+  deleteConfirm: (name: string) => string
+  deleteYes: string
   doneToast: (name: string) => string
   meowQuestion: string
   meowPermission: (tool: string) => string
@@ -85,6 +87,8 @@ export const STRINGS: Record<Language, Strings> = {
     stoppedToast: name => `Stopped "${name}". Hand it a skill to resume.`,
     stoppedNote: 'Stopped: hand it a skill (＋Skill) to resume',
     deleteCat: '🗑 Delete',
+    deleteConfirm: name => `Delete "${name}"? It is still working: it is stopped first, then removed.`,
+    deleteYes: 'Stop and delete',
     doneToast: name => `"${name}" finished its task`,
     meowQuestion: 'An agent has a question for you: answer it in the Agent Cats dashboard',
     meowPermission: tool => `An agent wants to use ${tool} and is waiting for your approval`,
@@ -151,6 +155,8 @@ export const STRINGS: Record<Language, Strings> = {
     stoppedToast: name => `已停止「${name}」，交個 skill 俾佢就會恢復工作。`,
     stoppedNote: '已停止：用「＋Skill」交個 skill 俾佢就會恢復工作',
     deleteCat: '🗑 刪除',
+    deleteConfirm: name => `確定刪除「${name}」？佢仲做緊嘢：會先停咗佢，再清走。`,
+    deleteYes: '停止並刪除',
     doneToast: name => `「${name}」完成咗任務`,
     meowQuestion: '有 agent 問你問題，喺 Agent 貓貓 dashboard 答',
     meowPermission: tool => `有 agent 想用 ${tool}，等你批准`,

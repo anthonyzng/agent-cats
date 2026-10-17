@@ -12,7 +12,7 @@ A [Claude Code](https://claude.com/claude-code) mod that turns the agents of a s
   - **Close** it when you no longer need to wake it.
 - **Show only some cats.** The counts at the top are buttons: **All**, **Working**, **Asleep** and **Waiting for you** list only those cats. Press the chosen one again to see all.
 - **Stop a cat.** A working cat has **■ Stop**, which asks you to confirm first. The main agent's turn is aborted; a subagent is stopped with `TaskStop`. A stopped cat keeps its **＋Skill** picker: hand it a skill and it reads the skill and resumes (a subagent is woken with `SendMessage`, so it needs a name).
-- **Delete a cat.** A cat that is not working has **🗑 Delete**. It leaves the dashboard and does not come back, even while Claude Code still lists the agent.
+- **Delete a cat.** Every subagent's cat has **🗑 Delete**. It leaves the dashboard and does not come back, even while Claude Code still lists the agent. A cat still working asks you to confirm first, and is stopped before it is removed. A subagent that Claude Code no longer lists is marked done, so it never stays stuck as working. The main agent cannot be deleted.
 - **A sound when an agent finishes or needs you.** `sounds/Hachimi.mp3` plays when an agent finishes its task, asks you something or waits for a permission. One clip plays at a time: agents finishing one after another sound once, and nothing is queued or layered while it plays. A cat you stopped does not sound.
 - **Questions answered in place.** When an agent asks you something (`AskUserQuestion`), the question appears at the top of the dashboard with the sound.
   - Pick an option, or type your own answer.

@@ -188,6 +188,46 @@ test('finishing agents chime once at a time: no overlap, no queue', async ($: an
   expect(eng.plays.length).toBe(2)
 })
 
+test('a cat still working can be deleted: confirmed, stopped, then removed', async ($: any, on: any) => {
+  const list = { value: [{ id: 'a1', description: 'stuck task', type: 'Explore', status: 'running', name: 'cat-a' }] }
+  const eng = engine(on, list)
+  await $.session.start({ source: 'startup', cwd: '.' })
+  await eng.clock.advance(1500)
+  const ui = await mountPane($, 'desktop')
+
+  await ui.press({ key: 'delete-a1' })
+  // A working cat asks first: nothing stopped or removed yet.
+  expect(eng.stops).toEqual([])
+  expect(await ui.find({ key: 'delete-yes-a1' })).toBeTruthy()
+
+  await ui.press({ key: 'delete-yes-a1' })
+  expect(eng.stops).toEqual(['a1'])
+  expect(await ui.find({ key: 'agent-a1' })).toBeFalsy()
+  // The engine still lists it: it does not come back.
+  await eng.clock.advance(1500)
+  expect(await ui.find({ key: 'agent-a1' })).toBeFalsy()
+  await ui.unmount()
+})
+
+test('a working subagent the engine no longer lists is closed, not left working', async ($: any, on: any) => {
+  const list = { value: [{ id: 'a1', description: 'gone task', type: 'Explore', status: 'running', name: 'cat-a' }] }
+  const eng = engine(on, list)
+  await $.session.start({ source: 'startup', cwd: '.' })
+  await eng.clock.advance(1500)
+
+  const ui = await mountPane($, 'desktop')
+  expect(await ui.find({ key: 'stop-a1' })).toBeTruthy()
+
+  list.value = []
+  await eng.clock.advance(1500)
+  // No Stop left on it, and Delete deletes at once: no confirmation, no TaskStop.
+  expect(await ui.find({ key: 'stop-a1' })).toBeFalsy()
+  await ui.press({ key: 'delete-a1' })
+  expect(eng.stops).toEqual([])
+  expect(await ui.find({ key: 'agent-a1' })).toBeFalsy()
+  await ui.unmount()
+})
+
 test('on Windows the chime is played by PowerShell, not the engine player', async ($: any, on: any) => {
   const list = { value: [{ id: 'a1', description: 'one', type: 'Explore', status: 'running', name: 'cat-a' }] }
   const eng = engine(on, list, 'Windows_NT')

@@ -362,14 +362,23 @@ async function stopAgent($: EngineInterface, row: CatAgent): Promise<void> {
   $.ui.toast(`🐱 ${t.stoppedToast(nameOf(row))}`)
 }
 
-// Deletes a cat that is not working: removed now, and remembered so that the
-// engine's own list (which keeps an agent for a while) never brings it back.
-async function deleteAgent($: EngineInterface, id: string): Promise<void> {
-  if (id === MAIN) {
+// Deletes a subagent's cat: removed now, and remembered so that the engine's
+// own list (which keeps an agent for a while) never brings it back. A cat
+// still marked working is stopped first; a stop that fails (the agent is
+// already gone, its cat left marked working) does not keep the cat.
+async function deleteAgent($: EngineInterface, row: CatAgent): Promise<void> {
+  if (row.id === MAIN) {
     return
   }
-  await update($, deleted, list => [...new Set([...(list ?? []), id])])
-  await changeAgents($, rows => rows.filter(r => r.id !== id || r.status === 'working'))
+  if (row.status === 'working' && !row.isStopped) {
+    try {
+      await $.tool.call({ tool: 'TaskStop', task_id: row.id } as never)
+    } catch (error) {
+      $.ui.log(`agent-cats: could not stop ${row.id} before deleting it (${String(error)})`, { to: 'debug' })
+    }
+  }
+  await update($, deleted, list => [...new Set([...(list ?? []), row.id])])
+  await changeAgents($, rows => rows.filter(r => r.id !== row.id))
 }
 
 async function sync($: EngineInterface): Promise<void> {
@@ -389,7 +398,14 @@ async function sync($: EngineInterface): Promise<void> {
     const next = current.map(row => {
       const info = list.find(a => a.id === row.id)
       if (!info) {
-        return row
+        // A subagent the engine no longer lists has ended: a cat left
+        // working would show Stop forever and never Delete.
+        if (row.id === MAIN || row.status !== 'working') {
+          return row
+        }
+        changed = true
+
+        return { ...row, status: 'closed' as CatStatus, endedAt: row.endedAt ?? now, tool: undefined }
       }
       const status = catStatusOf(info)
       if (status === row.status && info.status === row.rawStatus && info.name === row.name) {
@@ -1017,8 +1033,32 @@ export const register: Register = (on, options) => {
                 />
               </Box>
             )}
-            {r.id !== MAIN && r.status !== 'working' && (
-              <Button key={`delete-${r.id}`} label={t.deleteCat} plain onPress={() => deleteAgent($, r.id)} />
+            {r.id !== MAIN && stopping !== `delete:${r.id}` && (
+              <Button
+                key={`delete-${r.id}`}
+                label={t.deleteCat}
+                plain
+                onPress={() =>
+                  r.status === 'working' && !r.isStopped
+                    ? update($, confirmStop, () => `delete:${r.id}`)
+                    : deleteAgent($, r)
+                }
+              />
+            )}
+            {r.id !== MAIN && stopping === `delete:${r.id}` && (
+              <Box flexDirection="row" gap={1} alignItems="center" flexWrap="wrap">
+                <Text color="#E76F51">{t.deleteConfirm(nameOf(r))}</Text>
+                <Button
+                  key={`delete-yes-${r.id}`}
+                  label={t.deleteYes}
+                  variant="primary"
+                  onPress={async () => {
+                    await update($, confirmStop, () => '')
+                    await deleteAgent($, r)
+                  }}
+                />
+                <Button key={`delete-no-${r.id}`} label={t.cancel} plain onPress={() => update($, confirmStop, () => '')} />
+              </Box>
             )}
           </Box>
         ))}
