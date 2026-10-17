@@ -168,13 +168,22 @@ const CHIME = 'sounds/Hachimi.mp3'
 // is dropped (never queued, never layered), so agents finishing or asking one
 // after another sound once until the clip has played through.
 let isChiming = false
+// How long a permission request must stay unanswered before it chimes.
+const PERMISSION_GRACE_MS = 1500
 
 // Claude Code's own player (`afplay`) exists on macOS only: on Windows
 // `$.audio.play` skips the clip without an error. There the clip is played by
 // PowerShell's MediaPlayer (WPF), which reads mp3; it waits until the clip has
 // played through, so the one-clip-at-a-time rule holds there too. The path
 // goes in through the environment, never spliced into the script.
+// `isChiming` covers one session; every session (and Claude Code process)
+// loads its own copy of this module, so the player also holds a named mutex
+// for the clip's whole length: a cat sound already playing anywhere makes it
+// skip. Windows releases the mutex when the process ends, whatever the cause.
 const WINDOWS_PLAYER = [
+  '$m = New-Object System.Threading.Mutex($false, "Local\\agent-cats-chime")',
+  'try { $isOwner = $m.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $isOwner = $true }',
+  'if (-not $isOwner) { exit 0 }',
   'Add-Type -AssemblyName PresentationCore',
   '$p = New-Object System.Windows.Media.MediaPlayer',
   '$p.Open([uri]$env:AGENT_CATS_CLIP)',
@@ -184,6 +193,7 @@ const WINDOWS_PLAYER = [
   '$ms = if ($p.NaturalDuration.HasTimeSpan) { $p.NaturalDuration.TimeSpan.TotalMilliseconds } else { 3000 }',
   'Start-Sleep -Milliseconds ([int]$ms + 100)',
   '$p.Close()',
+  '$m.ReleaseMutex()',
 ].join('; ')
 
 async function playChime($: EngineInterface): Promise<void> {
@@ -542,11 +552,43 @@ export const register: Register = (on, options) => {
     if (e.agentId === undefined) {
       mainTurnId = undefined
       const now = await $.clock.now()
-      const before = (await read($, agents)).find(r => r.id === MAIN)
       await setMain($, row => ({ ...row, status: 'sleeping', rawStatus: 'idle', endedAt: now, tool: undefined }))
-      if (e.reason === 'answer' && before && !before.isStopped) {
-        void chime($, t.doneToast(nameOf(before)))
+    }
+
+    return next(e)
+  })
+
+  // The main agent's chime: only when its work is really done. A turn also
+  // ends while background work it waits for still runs (a subagent, a shell, a
+  // monitor) or with a one-shot wakeup set: it is only paused then, and the
+  // work that wakes it chimes for itself. A settings Stop hook that blocks the
+  // stop (it re-prompts) means the turn goes on: the chime waits for the stop
+  // that holds. An interrupted turn raises no Stop.
+  on('classic.Stop', async ($, e, next) => {
+    const result = await next(e)
+    const isPaused =
+      (e.background_tasks ?? []).length > 0 || (e.session_crons ?? []).some(cron => !cron.recurring)
+    if (!result.block && !isPaused) {
+      const main = (await read($, agents)).find(r => r.id === MAIN)
+      if (main && !main.isStopped) {
+        void chime($, t.doneToast(nameOf(main)))
       }
+    }
+
+    return result
+  })
+
+  // A plan waiting for the person's approval.
+  on('tool.call', { tool: 'ExitPlanMode' }, async ($, e, next) => {
+    void chime($, t.meowPlan)
+
+    return next(e)
+  })
+
+  // An MCP server's form or link waiting for the person.
+  on('classic.Notification', async ($, e, next) => {
+    if (e.notification_type === 'elicitation_dialog' || e.notification_type === 'elicitation_url_dialog') {
+      void chime($, t.meowQuestion)
     }
 
     return next(e)
@@ -641,7 +683,15 @@ export const register: Register = (on, options) => {
     }
     await update($, pending, list => [...(list ?? []), item])
     void $.ui.open({ id: PANE, title: t.title })
-    void chime($, t.meowPermission(e.tool_name))
+    // A request the person never sees (auto mode or a rule settles it at
+    // once) is gone from the list by then: only a prompt still waiting chimes.
+    $.clock.after(PERMISSION_GRACE_MS, () => {
+      void (async () => {
+        if ((await read($, pending)).some(p => p.id === item.id)) {
+          await chime($, t.meowPermission(e.tool_name))
+        }
+      })()
+    })
 
     return next(e)
   })

@@ -23,6 +23,8 @@ function engine(on: any, list: { value: Info[] }, os?: string) {
   const stops: string[] = []
   const aborts: string[] = []
   const toasts: string[] = []
+  // What the settings Stop hooks beneath answer: `{ block }` re-prompts.
+  const stopResult: { value: Record<string, unknown> } = { value: {} }
   let release: () => void = () => {}
   on('command.list', () => ({ value: [{ name: 'tidy', description: 'd', source: 'plugin' }] }))
   on('session.usage', () => ({ value: { startedAt: 0, context: {}, rateLimits: [] } }))
@@ -48,6 +50,9 @@ function engine(on: any, list: { value: Info[] }, os?: string) {
       release = () => resolve({ value: undefined })
     })
   })
+  on('classic.Stop', () => stopResult.value)
+  on('classic.PermissionRequest', () => ({}))
+  on('classic.Notification', () => ({}))
   on('env.get', (_$: any, e: any) => ({ value: e.name === 'OS' ? os : undefined }))
   on('process.run', (_$: any, e: any) => {
     runs.push({ argv: [...e.argv], clip: e.init?.env?.AGENT_CATS_CLIP ?? '' })
@@ -60,7 +65,21 @@ function engine(on: any, list: { value: Info[] }, os?: string) {
     return { result: 'ok', text: 'ok' }
   })
 
-  return { clock, plays, runs, stops, aborts, toasts, done: () => release() }
+  return { clock, plays, runs, stops, aborts, toasts, stopResult, done: () => release() }
+}
+
+// The input of the settings Stop event at the end of a main-agent turn.
+function stopInput(extra: Record<string, unknown> = {}) {
+  return {
+    hook_event_name: 'Stop',
+    session_id: 's',
+    transcript_path: '',
+    cwd: '.',
+    stop_hook_active: false,
+    background_tasks: [],
+    session_crons: [],
+    ...extra,
+  } as never
 }
 
 async function mountPane($: any, surface: 'desktop' | 'terminal') {
@@ -169,23 +188,115 @@ test('finishing agents chime once at a time: no overlap, no queue', async ($: an
   await $.session.start({ source: 'startup', cwd: '.' })
   await eng.clock.advance(1500)
 
-  // Two finish in the same tick: one play.
+  // Two finish in the same tick: each one's toast, one play.
   list.value = list.value.map(a => (a.id === 'a3' ? a : { ...a, status: 'completed' }))
   await eng.clock.advance(1500)
   expect(eng.plays).toEqual(['sounds/Hachimi.mp3'])
+  expect(eng.toasts.some(text => text.includes('"one" finished'))).toBe(true)
 
-  // A third finishes while the clip still plays: dropped, not queued.
+  // A third finishes, then the main agent, while the clip still plays: dropped, not queued.
   list.value = list.value.map(a => ({ ...a, status: 'completed' }))
   await eng.clock.advance(1500)
+  await $.turn.start({ text: 'first', turnId: 't1' })
+  await $.classic.Stop(stopInput())
+  await $.turn.complete({ answer: 'done', durationMs: 5, reason: 'answer', turnId: 't1' } as never)
   expect(eng.plays.length).toBe(1)
 
   // Once the clip has played through, the next one sounds again.
   eng.done()
   await eng.clock.advance(10)
   await $.turn.start({ text: 'next', turnId: 't2' })
+  await $.classic.Stop(stopInput())
   await $.turn.complete({ answer: 'done', durationMs: 5, reason: 'answer', turnId: 't2' } as never)
   console.log(`plays: ${eng.plays.join(', ')}`)
   expect(eng.plays.length).toBe(2)
+})
+
+test('the main agent chimes only when its work is really done', async ($: any, on: any) => {
+  const eng = engine(on, { value: [] })
+  await $.session.start({ source: 'startup', cwd: '.' })
+  const turn = async (stop: Record<string, unknown> | undefined) => {
+    await $.turn.start({ text: 'work', turnId: 't' })
+    if (stop) {
+      await $.classic.Stop(stopInput(stop))
+    }
+    await $.turn.complete({ answer: 'a', durationMs: 5, reason: 'answer', turnId: 't' } as never)
+    eng.done()
+    await eng.clock.advance(10)
+  }
+
+  // A turn end alone (no Stop: interrupted) does not chime.
+  await turn(undefined)
+  // Paused for background work, or for a one-shot wakeup: no chime.
+  await turn({ background_tasks: [{ id: 'b1', type: 'subagent', status: 'running', description: 'x' }] })
+  await turn({ session_crons: [{ id: 'c1', schedule: '5 * * * *', recurring: false, prompt: 'p' }] })
+  // A settings Stop hook blocks the stop (it re-prompts): no chime yet.
+  eng.stopResult.value = { block: 'write it in Chinese' }
+  await turn({})
+  expect(eng.plays).toEqual([])
+
+  // A recurring loop does not hold the end back, and the stop that holds chimes.
+  eng.stopResult.value = {}
+  await turn({ stop_hook_active: true, session_crons: [{ id: 'c2', schedule: '*/5 * * * *', recurring: true, prompt: 'p' }] })
+  expect(eng.plays.length).toBe(1)
+})
+
+test('a permission request chimes only while it still waits for the person', async ($: any, on: any) => {
+  const eng = engine(on, { value: [] })
+  await $.session.start({ source: 'startup', cwd: '.' })
+  const ask = (tool: string) =>
+    $.classic.PermissionRequest({
+      hook_event_name: 'PermissionRequest',
+      session_id: 's',
+      transcript_path: '',
+      cwd: '.',
+      tool_name: tool,
+      tool_input: { command: 'ls' },
+    } as never)
+
+  // Settled at once (auto mode, a rule): the call ran, nothing chimes.
+  await ask('Bash')
+  await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
+  await eng.clock.advance(2000)
+  expect(eng.plays).toEqual([])
+
+  // Still waiting after the grace time: it chimes.
+  await ask('Write')
+  await eng.clock.advance(2000)
+  expect(eng.plays.length).toBe(1)
+})
+
+test('a plan waiting for approval and an MCP form chime', async ($: any, on: any) => {
+  const eng = engine(on, { value: [] })
+  await $.session.start({ source: 'startup', cwd: '.' })
+  await $.tool.call({ tool: 'ExitPlanMode', plan: 'p' } as never)
+  expect(eng.plays.length).toBe(1)
+  eng.done()
+  await eng.clock.advance(10)
+  await $.classic.Notification({
+    hook_event_name: 'Notification',
+    session_id: 's',
+    transcript_path: '',
+    cwd: '.',
+    message: 'm',
+    notification_type: 'elicitation_dialog',
+  } as never)
+  expect(eng.plays.length).toBe(2)
+})
+
+test('a main turn that pauses for a working subagent is silent; the subagent finishing chimes', async ($: any, on: any) => {
+  const list = { value: [{ id: 'a1', description: 'background', type: 'Explore', status: 'running', name: 'cat-a' }] }
+  const eng = engine(on, list)
+  await $.session.start({ source: 'startup', cwd: '.' })
+  await eng.clock.advance(1500)
+
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await $.turn.complete({ answer: 'done', durationMs: 5, reason: 'answer', turnId: 't1' } as never)
+  expect(eng.plays).toEqual([])
+
+  list.value = list.value.map(a => ({ ...a, status: 'completed' }))
+  await eng.clock.advance(1500)
+  expect(eng.plays).toEqual(['sounds/Hachimi.mp3'])
 })
 
 test('a cat still working can be deleted: confirmed, stopped, then removed', async ($: any, on: any) => {
